@@ -40,6 +40,10 @@ export const ChatInterface = ({ messages, isAiThinking, onSendMessage, isEmpty }
     }
   };
 
+  const formatTimestamp = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString();
+  };
+
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto">
       {/* Messages Area */}
@@ -76,16 +80,16 @@ export const ChatInterface = ({ messages, isAiThinking, onSendMessage, isEmpty }
                       <span className="text-sm font-medium">Surya AI</span>
                     </div>
                   )}
-                  {message.attachedFile && (
+                  {message.attached_file && (
                     <div className="mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm">
-                      📎 {message.attachedFile.name}
+                      📎 {message.attached_file.filename || message.attached_file.name}
                     </div>
                   )}
-                  <div className={`${message.isCode ? 'font-mono text-sm' : ''}`}>
+                  <div className={`whitespace-pre-wrap ${message.is_code ? 'font-mono text-sm' : ''}`}>
                     {message.content}
                   </div>
                   <div className="text-xs opacity-70 mt-2">
-                    {message.timestamp.toLocaleTimeString()}
+                    {formatTimestamp(message.timestamp)}
                   </div>
                 </div>
               </div>

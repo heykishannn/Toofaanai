@@ -1,11 +1,11 @@
 import React from 'react';
-import { Plus, MessageSquare, Trash2, X } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, X, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 
-export const Sidebar = ({ isOpen, chats, onNewChat, onChatSelect, onDeleteChat, onClose }) => {
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+export const Sidebar = ({ isOpen, chats, isLoading, onNewChat, onChatSelect, onDeleteChat, onClose }) => {
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -52,7 +52,12 @@ export const Sidebar = ({ isOpen, chats, onNewChat, onChatSelect, onDeleteChat, 
 
           {/* Chat List */}
           <ScrollArea className="flex-1 p-4">
-            {chats.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+                <span className="ml-2 text-gray-500 dark:text-gray-400">Loading chats...</span>
+              </div>
+            ) : chats.length === 0 ? (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No chats yet</p>
@@ -72,7 +77,7 @@ export const Sidebar = ({ isOpen, chats, onNewChat, onChatSelect, onDeleteChat, 
                           {chat.title}
                         </h3>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {formatDate(chat.timestamp)}
+                          {formatDate(chat.updated_at || chat.created_at)}
                         </p>
                       </div>
                       <Button

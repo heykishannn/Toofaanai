@@ -5,17 +5,18 @@ import { ChatInterface } from './ChatInterface';
 import { TabsFooter } from './TabsFooter';
 import { CodeViewer } from './CodeViewer';
 import { PreviewPane } from './PreviewPane';
-import { mockChats, mockResponse } from '../utils/mock';
+import { apiService } from '../services/api';
 
 export const SuryaAI = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
-  const [chats, setChats] = useState(mockChats);
+  const [chats, setChats] = useState([]);
   const [currentChatId, setCurrentChatId] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [currentChat, setCurrentChat] = useState(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Set dark mode class on document
@@ -26,95 +27,128 @@ export const SuryaAI = () => {
     }
   }, [isDarkMode]);
 
-  const handleNewChat = () => {
-    const newChatId = Date.now().toString();
-    const newChat = {
-      id: newChatId,
-      title: 'New Chat',
-      timestamp: new Date(),
-      messages: []
-    };
-    setChats([newChat, ...chats]);
-    setCurrentChatId(newChatId);
-    setMessages([]);
-    setActiveTab('chat');
-    setIsSidebarOpen(false);
-  };
+  useEffect(() => {
+    // Load chats on component mount
+    loadChats();
+  }, []);
 
-  const handleChatSelect = (chatId) => {
-    const chat = chats.find(c => c.id === chatId);
-    if (chat) {
-      setCurrentChatId(chatId);
-      setMessages(chat.messages);
-      setActiveTab('chat');
-      setIsSidebarOpen(false);
+  const loadChats = async () => {
+    try {
+      const fetchedChats = await apiService.getChats();
+      setChats(fetchedChats);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error loading chats:', error);
+      setIsLoading(false);
     }
   };
 
-  const handleDeleteChat = (chatId) => {
-    setChats(chats.filter(c => c.id !== chatId));
-    if (currentChatId === chatId) {
-      setCurrentChatId(null);
-      setMessages([]);
+  const handleNewChat = async () => {
+    try {
+      const newChat = await apiService.createChat();
+      setChats([newChat, ...chats]);
+      setCurrentChatId(newChat.id);
+      setCurrentChat(newChat);
+      setActiveTab('chat');
+      setIsSidebarOpen(false);
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
+  };
+
+  const handleChatSelect = async (chatId) => {
+    try {
+      const chat = await apiService.getChat(chatId);
+      setCurrentChatId(chatId);
+      setCurrentChat(chat);
+      setActiveTab('chat');
+      setIsSidebarOpen(false);
+    } catch (error) {
+      console.error('Error selecting chat:', error);
+    }
+  };
+
+  const handleDeleteChat = async (chatId) => {
+    try {
+      await apiService.deleteChat(chatId);
+      setChats(chats.filter(c => c.id !== chatId));
+      
+      if (currentChatId === chatId) {
+        setCurrentChatId(null);
+        setCurrentChat(null);
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
     }
   };
 
   const handleSendMessage = async (message, attachedFile) => {
-    if (!currentChatId) {
-      handleNewChat();
-    }
+    try {
+      // If no current chat, create one
+      let chatId = currentChatId;
+      if (!chatId) {
+        const newChat = await apiService.createChat();
+        chatId = newChat.id;
+        setCurrentChatId(chatId);
+        setCurrentChat(newChat);
+        setChats([newChat, ...chats]);
+      }
 
-    const userMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: message,
-      timestamp: new Date(),
-      attachedFile: attachedFile
-    };
-
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setIsAiThinking(true);
-
-    // Update chat title if it's the first message
-    if (newMessages.length === 1) {
-      const updatedChats = chats.map(chat => 
-        chat.id === currentChatId 
-          ? { ...chat, title: message.substring(0, 50) + (message.length > 50 ? '...' : '') }
-          : chat
-      );
-      setChats(updatedChats);
-    }
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = mockResponse(message);
-      const aiMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: aiResponse.content,
-        timestamp: new Date(),
-        isCode: aiResponse.isCode
+      // Add user message to UI immediately
+      const userMessage = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: message,
+        timestamp: new Date().toISOString(),
+        attached_file: attachedFile
       };
 
-      const updatedMessages = [...newMessages, aiMessage];
-      setMessages(updatedMessages);
-      setIsAiThinking(false);
+      const updatedMessages = [...(currentChat?.messages || []), userMessage];
+      setCurrentChat(prev => ({
+        ...prev,
+        messages: updatedMessages
+      }));
+
+      setIsAiThinking(true);
+
+      // Upload file if attached
+      let uploadedFile = null;
+      if (attachedFile) {
+        uploadedFile = await apiService.uploadFile(attachedFile);
+      }
+
+      // Send message to backend
+      const aiResponse = await apiService.sendMessage(chatId, message, uploadedFile);
+      
+      // Update chat with AI response
+      const finalMessages = [...updatedMessages, {
+        id: aiResponse.id,
+        type: 'ai',
+        content: aiResponse.content,
+        timestamp: aiResponse.timestamp,
+        is_code: aiResponse.is_code
+      }];
+
+      setCurrentChat(prev => ({
+        ...prev,
+        messages: finalMessages,
+        title: message.substring(0, 50) + (message.length > 50 ? '...' : '')
+      }));
 
       // If it's code, set it for the code viewer
-      if (aiResponse.isCode) {
+      if (aiResponse.is_code) {
         setGeneratedCode(aiResponse.content);
         setActiveTab('code');
       }
 
-      // Update chat messages
-      const updatedChats = chats.map(chat => 
-        chat.id === currentChatId 
-          ? { ...chat, messages: updatedMessages }
-          : chat
-      );
-      setChats(updatedChats);
-    }, 2000);
+      // Refresh chats list
+      await loadChats();
+      
+      setIsAiThinking(false);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setIsAiThinking(false);
+    }
   };
 
   return (
@@ -130,6 +164,7 @@ export const SuryaAI = () => {
       <Sidebar
         isOpen={isSidebarOpen}
         chats={chats}
+        isLoading={isLoading}
         onNewChat={handleNewChat}
         onChatSelect={handleChatSelect}
         onDeleteChat={handleDeleteChat}
@@ -140,10 +175,10 @@ export const SuryaAI = () => {
         <div className="flex-1 overflow-hidden">
           {activeTab === 'chat' && (
             <ChatInterface
-              messages={messages}
+              messages={currentChat?.messages || []}
               isAiThinking={isAiThinking}
               onSendMessage={handleSendMessage}
-              isEmpty={messages.length === 0}
+              isEmpty={!currentChat || currentChat.messages.length === 0}
             />
           )}
           {activeTab === 'code' && (
