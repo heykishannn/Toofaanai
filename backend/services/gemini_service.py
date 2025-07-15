@@ -3,8 +3,14 @@ import asyncio
 import base64
 import tempfile
 from typing import Dict, Any, Optional
+from dotenv import load_dotenv
+from pathlib import Path
 from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
 from models.chat import MessageModel
+
+# Load environment variables
+ROOT_DIR = Path(__file__).parent.parent
+load_dotenv(ROOT_DIR / '.env')
 
 class GeminiService:
     def __init__(self):
